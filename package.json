@@ -12,14 +12,16 @@
   "build": {
     "appId": "com.hyperdeckcontroller.app",
     "productName": "HyperDeck Controller",
+    "linux": {
+      "target": ["AppImage"],
+      "category": "AudioVideo"
+    },
     "win": {
       "target": ["portable"]
     },
     "mac": {
-      "target": ["dmg"]
-    },
-    "linux": {
-      "target": ["AppImage"]
+      "target": ["dmg"],
+      "category": "public.app-category.video"
     }
   },
   "devDependencies": {
