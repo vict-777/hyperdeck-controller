@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HyperDeck Controller</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: auto;
+    }
+    #root {
+      width: 100%;
+      min-height: 100vh;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const HyperDeckController = () => {
+      const [players, setPlayers] = useState([
+        { id: 1, name: 'Player 1', ip: '192.168.1.101', clip: null, nextClip: null, status: 'stopped', connected: false, loop: false },
+        { id: 2, name: 'Player 2', ip: '192.168.1.102', clip: null, nextClip: null, status: 'stopped', connected: false, loop: false },
+        { id: 3, name: 'Player 3', ip: '192.168.1.103', clip: null, nextClip: null, status: 'stopped', connected: false, loop: false },
+        { id: 4, name: 'Player 4', ip: '192.168.1.104', clip: null, nextClip: null, status: 'stopped', connected: false, loop: false }
+      ]);
+
+      const [clipLibrary] = useState([
+        { id: 1, name: 'Opening_Video.mov', duration: '00:00:30', thumbnail: 'https://images.unsplash.com/photo-1478720568477-152d9b164e26?w=400&h=225&fit=crop' },
+        { id: 2, name: 'Main_Content_A.mov', duration: '00:05:20', thumbnail: 'https://images.unsplash.com/photo-1492619375914-88005aa9e8fb?w=400&h=225&fit=crop' },
+        { id: 3, name: 'Main_Content_B.mov', duration: '00:04:45', thumbnail: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=400&h=225&fit=crop' },
+        { id: 4, name: 'Transition_01.mov', duration: '00:00:05', thumbnail: 'https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=400&h=225&fit=crop' },
+        { id: 5, name: 'Transition_02.mov', duration: '00:00:05', thumbnail: 'https://images.unsplash.com/photo-1557682224-5b8590cd9ec5?w=400&h=225&fit=crop' },
+        { id: 6, name: 'Background_Loop.mov', duration: '00:01:00', thumbnail: 'https://images.unsplash.com/photo-1511447333015-45b65e60f6d5?w=400&h=225&fit=crop' },
+        { id: 7, name: 'Closing_Credits.mov', duration: '00:01:30', thumbnail: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=400&h=225&fit=crop' },
+        { id: 8, name: 'Promo_Video.mov', duration: '00:02:15', thumbnail: 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=400&h=225&fit=crop' }
+      ]);
+
+      const [draggedClip, setDraggedClip] = useState(null);
+      const [showSettings, setShowSettings] = useState(false);
+      const [showExternalControl, setShowExternalControl] = useState(false);
+      const [clipGridColumns, setClipGridColumns] = useState(4);
+      
+      const [externalControl, setExternalControl] = useState({
+        enabled: false,
+        listeningPort: 8888,
+        status: 'disconnected',
+        players: [
+          { id: 1, tallyEnabled: false, tallyInput: 1, streamDeckEnabled: false, streamDeckKey: 'player1_play' },
+          { id: 2, tallyEnabled: false, tallyInput: 2, streamDeckEnabled: false, streamDeckKey: 'player2_play' },
+          { id: 3, tallyEnabled: false, tallyInput: 3, streamDeckEnabled: false, streamDeckKey: 'player3_play' },
+          { id: 4, tallyEnabled: false, tallyInput: 4, streamDeckEnabled: false, streamDeckKey: 'player4_play' }
+        ]
+      });
+
+      useEffect(() => {
+        if (window.electronAPI) {
+          window.electronAPI.onExternalCommand((data) => {
+            console.log('External command received:', data);
+            
+            if (data.type === 'tally' && data.action === 'play') {
+              const playerControl = externalControl.players.find(
+                p => p.tallyEnabled && p.tallyInput === data.input
+              );
+              if (playerControl) {
+                handlePlay(playerControl.id);
+              }
+            } else if (data.type === 'streamdeck') {
+              const playerControl = externalControl.players.find(
+                p => p.streamDeckEnabled && p.streamDeckKey === data.key
+              );
+              if (playerControl) {
+                handlePlay(playerControl.id);
+              }
+            }
+          });
+        }
+        
+        if (externalControl.enabled) {
+          setExternalControl(prev => ({...prev, status: 'listening'}));
+        }
+      }, [externalControl.enabled]);
+
+      const handleDragStart = (clip) => {
+        setDraggedClip(clip);
+      };
+
+      const handleDragOver = (e) => {
+        e.preventDefault();
+      };
+
+      const handleDrop = (playerId, target = 'main') => {
+        if (draggedClip) {
+          if (target === 'next') {
+            setPlayers(players.map(p => {
+              if (p.id === playerId) {
+                if (!p.clip) {
+                  return { ...p, clip: draggedClip, status: 'ready' };
+                } else {
+                  return { ...p, nextClip: draggedClip };
+                }
+              }
+              return p;
+            }));
+          } else {
+            setPlayers(players.map(p => 
+              p.id === playerId ? { ...p, clip: draggedClip, status: 'ready' } : p
+            ));
+          }
+          setDraggedClip(null);
+        }
+      };
+
+      const handlePlay = async (playerId) => {
+        setPlayers(players.map(p => 
+          p.id === playerId ? { ...p, status: 'playing' } : p
+        ));
+        
+        if (window.electronAPI) {
+          const player = players.find(p => p.id === playerId);
+          try {
+            await window.electronAPI.sendHyperDeckCommand(player.ip, 'play');
+          } catch (error) {
+            console.error('Failed to play:', error);
+          }
+        }
+      };
+
+      const handleStop = (playerId) => {
+        setPlayers(players.map(p => 
+          p.id === playerId ? { ...p, status: 'stopped' } : p
+        ));
+        console.log(`Stopping Player ${playerId}`);
+      };
+
+      const handleCue = (playerId) => {
+        setPlayers(players.map(p => 
+          p.id === playerId ? { ...p, status: 'ready' } : p
+        ));
+        console.log(`Cueing Player ${playerId}`);
+      };
+
+      const handlePlayAll = () => {
+        setPlayers(players.map(p => 
+          p.clip ? { ...p, status: 'playing' } : p
+        ));
+        console.log('Playing all players');
+      };
+
+      const handleStopAll = () => {
+        setPlayers(players.map(p => ({ ...p, status: 'stopped' })));
+        console.log('Stopping all players');
+      };
+
+      const handleClearClip = (playerId) => {
+        setPlayers(players.map(p => {
+          if (p.id === playerId) {
+            return { 
+              ...p, 
+              clip: p.nextClip, 
+              nextClip: null, 
+              status: p.nextClip ? 'ready' : 'stopped' 
+            };
+          }
+          return p;
+        }));
+      };
+
+      const handleClearNextClip = (playerId) => {
+        setPlayers(players.map(p => 
+          p.id === playerId ? { ...p, nextClip: null } : p
+        ));
+      };
+
+      const toggleLoop = (playerId) => {
+        setPlayers(players.map(p => 
+          p.id === playerId ? { ...p, loop: !p.loop } : p
+        ));
+        console.log(`Toggling loop for Player ${playerId}`);
+      };
+
+      const updatePlayerIP = (playerId, newIP) => {
+        setPlayers(players.map(p => 
+          p.id === playerId ? { ...p, ip: newIP } : p
+        ));
+      };
+
+      const updateExternalControlPort = (port) => {
+        setExternalControl({...externalControl, listeningPort: port});
+      };
+
+      const toggleExternalControl = () => {
+        const newEnabled = !externalControl.enabled;
+        setExternalControl({
+          ...externalControl, 
+          enabled: newEnabled,
+          status: newEnabled ? 'listening' : 'disconnected'
+        });
+      };
+
+      const updatePlayerExternalControl = (playerId, field, value) => {
+        setExternalControl({
+          ...externalControl,
+          players: externalControl.players.map(p => 
+            p.id === playerId ? { ...p, [field]: value } : p
+          )
+        });
+      };
+
+      const simulateExternalCommand = (playerId, source) => {
+        console.log(`External command received from ${source} for Player ${playerId}`);
+        handlePlay(playerId);
+      };
+
+      const getStatusColor = (status) => {
+        switch(status) {
+          case 'playing': return 'bg-green-500';
+          case 'ready': return 'bg-yellow-500';
+          case 'stopped': return 'bg-gray-400';
+          default: return 'bg-gray-400';
+        }
+      };
+
+      const getGridClass = () => {
+        switch(clipGridColumns) {
+          case 4: return 'grid-cols-4';
+          case 6: return 'grid-cols-6';
+          case 8: return 'grid-cols-8';
+          default: return 'grid-cols-4';
+        }
+      };
+
+      return React.createElement('div', { className: "min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white p-6" },
+        React.
